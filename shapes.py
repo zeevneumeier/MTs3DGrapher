@@ -13,35 +13,21 @@ from OpenGL.GL.EXT.framebuffer_object import *
 
 import sys
 import ctypes
-import numpy
-
 from ctypes import *
-
-import PIL
-from PIL import Image
-#import sdl2
-#from sdl2 import video
-from numpy import array
 
 import json
 import time
 import os
 
-'''
-shapes = [
-          {"name":"box", "color": (1,0,0), "lines": [((0,0,0),(10,0,0)), ((10,0,0),(10,10,0)), ((10,10,0),(0,10,0)), ((0,10,0),(0,0,0))]}
 
-
-]
-'''
 
 shapes = []
 shapesLoadTime = None
 shapesLastLoadTryTime = None
+errorMessage = ""
 
 axisLimits = 100
 axisTics = [0, 1, 5, 10]
-
 
 def drawAxis():
 
@@ -121,6 +107,33 @@ def drawShape(shape, showName):
     if showName:
         drawText((maxX,maxY,maxZ), shape["name"], color)
 
+def drawErrorMessage():
+
+
+    if errorMessage:
+        
+        currentDisplay = glGetIntegerv( GL_VIEWPORT )
+        font = GLUT_BITMAP_TIMES_ROMAN_24
+        
+        blending = False
+        if glIsEnabled(GL_BLEND) :
+            blending = True
+
+        #glEnable(GL_BLEND)
+        glColor3fv((1,0,0))
+        
+        glViewport(20,currentDisplay[3]-30,1,1)
+        
+        glRasterPos2fv((0,0))
+        
+        for ch in errorMessage :
+            glutBitmapCharacter( font , ctypes.c_int( ord(ch) ) )
+        
+        
+        if not blending :
+            glDisable(GL_BLEND)
+
+        glViewport(currentDisplay[0], currentDisplay[1], currentDisplay[2], currentDisplay[3])
 
 def drawText(point, text, color, font=GLUT_BITMAP_9_BY_15):
     
@@ -139,30 +152,13 @@ def drawText(point, text, color, font=GLUT_BITMAP_9_BY_15):
         glDisable(GL_BLEND)
 
 
-
-
-def loadTexture(path):
-    img = Image.open(path).transpose(Image.FLIP_TOP_BOTTOM)
-    img_data = numpy.fromstring(img.tostring(), numpy.uint8)
-    width, height = img.size
-
-    texture = glGenTextures(1)
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-    glBindTexture(GL_TEXTURE_2D, texture)
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
-    glGenerateMipmap(GL_TEXTURE_2D)
-
-    return texture
-
 def loadShapeFile(shapeFile):
 
-    global shapes, shapesLastLoadTryTime, shapesLoadTime
+    global shapes, shapesLastLoadTryTime, shapesLoadTime, errorMessage
 
     if not shapesLoadTime or (time.time() - shapesLastLoadTryTime > 5 and os.stat(shapeFile).st_mtime != shapesLoadTime):
+        
+        errorMessage = ""
         
         print "----- loading json ----"
         
@@ -200,6 +196,8 @@ def loadShapeFile(shapeFile):
         except Exception as exp:
             print "bad json. try again"
             print exp
+            errorMessage = str(exp)
+            errorMessage = ((errorMessage[:150] + '..') if len(errorMessage) > 150 else errorMessage)
 
         shapesLastLoadTryTime = time.time()
         shapesLoadTime = os.stat(shapeFile).st_mtime
@@ -210,18 +208,31 @@ def loadShapeFile(shapeFile):
 if __name__ == "__main__":
     
     if len(sys.argv) < 2:
-        print "USSAGE: shapes shapefile.json"
-        exit(0)
+        
+        #try default
+        try:
+            f = open("shapes.json")
+            f.close()
+            shapeFile = "shapes.json"
+        except:
+            print "Error: can't find shapes.json file. Make sure it is in the running directory or pass the file path as a parameter."
+            exit(0)
     
-    shapeFile = sys.argv[1]
+    else:
+        shapeFile = sys.argv[1]
 
     loadShapeFile(shapeFile)
     
     print shapes
     
     pygame.init()
-    display = (1920,1080)
-    pygame.display.set_mode(display, DOUBLEBUF|OPENGL)
+    pygame.font.init()
+
+    infoObject = pygame.display.Info()
+
+    display = (int(infoObject.current_w*0.80),int(infoObject.current_h*0.80))
+    screen = pygame.display.set_mode(display, DOUBLEBUF|OPENGL|RESIZABLE)
+
 
     gluPerspective(50, (float(display[0])/float(display[1])), 0.1, 5000)
 
@@ -232,7 +243,6 @@ if __name__ == "__main__":
     #save the matrix for later resetting
     glPushMatrix()
 
-    mouseRotate = False
     axisTicksIndex = 0
     showShapeName = False
 
@@ -275,15 +285,18 @@ if __name__ == "__main__":
                 if event.key == pygame.K_n:
                     showShapeName = not showShapeName
 
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    mouseRotate = not mouseRotate
 
-            if event.type == pygame.MOUSEMOTION and mouseRotate:
+            if event.type == pygame.MOUSEMOTION and event.buttons[0]:
                 
                 #print event.rel
             
                 glRotatef(.5, event.rel[1], event.rel[0], 0)
+
+            if event.type == pygame.VIDEORESIZE:
+                #print event
+                #glViewport(0,0, event.w, event.h)
+                pass
+
 
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
         drawAxis()
@@ -292,7 +305,7 @@ if __name__ == "__main__":
         for shape in shapes:
             drawShape(shape, showShapeName)
 
-        
+        drawErrorMessage()
         
         #Cube2(myTexture)
         pygame.display.flip()

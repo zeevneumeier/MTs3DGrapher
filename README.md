@@ -16,8 +16,7 @@ Requirements:
 1) Python 2.7
 2) Xcode command line tools (install from app store)
 3) pygame: sudo pip install pygame
-4) PIL: sudo pip install pillow
-5) Python OpenGL: pip install PyOpenGL PyOpenGL_accelerate
+4) Python OpenGL: pip install PyOpenGL PyOpenGL_accelerate
 
 Use:
 python shapes.pl [JSON_FILE]
